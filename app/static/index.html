@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Face Recognition</title>
+</head>
+<body>
+    <h1>Face Recognition</h1>
+    <form action="/register" method="post" enctype="multipart/form-data">
+        Name: <input type="text" name="name" required><br>
+        Image: <input type="file" name="file" accept="image/*" required><br>
+        <button type="submit">Register Face</button>
+    </form>
+    <hr>
+    <form action="/recognize" method="post" enctype="multipart/form-data">
+        Image: <input type="file" name="file" accept="image/*" required><br>
+        <button type="submit">Recognize Face</button>
+    </form>
+</body>
+</html>

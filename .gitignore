@@ -1,1 +1,11 @@
-node_modules
+# Environments
+project_env/
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Editors
+.vscode/

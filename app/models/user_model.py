@@ -1,9 +1,13 @@
-from sqlalchemy import Column, Integer, String, ARRAY, Float
-from app.database import Base
+from sqlalchemy import Column, Integer, String, DateTime
+from app.core.database import Base
+from sqlalchemy.sql import func
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=True)
-    face_embedding = Column(ARRAY(Float), nullable=True)
+    name = Column(String, nullable=False) # ده اللي شايل Hamed, Mariam, Aya
+    # غيرنا النوع لـ String عشان يطابق الـ text اللي في الصورة
+    face_embedding = Column(String, nullable=True) 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+     

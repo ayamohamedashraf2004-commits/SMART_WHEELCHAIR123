@@ -1,83 +1,130 @@
+import face_recognition
 import cv2
-import mediapipe as mp
 import numpy as np
 from supabase import create_client
-import os
-from dotenv import load_dotenv
+from app.core.config import get_settings 
 
-# 1. تحميل الإعدادات وتأكيد المسار
-load_dotenv() 
+# 1. الإعدادات والاتصال
+settings = get_settings()
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+fernet = settings.fernet
 
-# 2. سحب القيم مع استخدام .strip() لمسح أي مسافات زيادة (مهم جداً!)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
+def get_ear(eye_landmarks):
+    """حساب فتحة العين - كل ما الرقم يقل يعني العين بتتقفل"""
+    top = np.mean(eye_landmarks[1:3], axis=0)
+    bottom = np.mean(eye_landmarks[4:6], axis=0)
+    return np.linalg.norm(top - bottom)
 
-# 3. حل بديل لو الـ .env مقرأش (حطي الرابط والمفتاح بتوعك هنا مباشرة للتجربة)
-if not SUPABASE_URL or "https" not in SUPABASE_URL:
-    SUPABASE_URL = "https://jqlczjccjkzxqobmiykd.supabase.co"
-    SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxbGN6amNjamt6eHFvYm1peWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjMzMzcsImV4cCI6MjA4ODEzOTMzN30.-O3GBags3Q-R-_zMgHIMdESqZwDu1NT1jslg5aDoZZA" # المفتاح الطويل بتاعك
+def load_registered_users():
+    try:
+        response = supabase.table("users").select("*").execute()
+        users_data = response.data
+        registered_users = []
+        for user in users_data:
+            encrypted = user["face_embedding"]
+            encrypted_data = encrypted.encode() if isinstance(encrypted, str) else encrypted
+            decrypted_bytes = fernet.decrypt(encrypted_data)
+            embedding = np.frombuffer(decrypted_bytes, dtype=np.float64)
+            registered_users.append({"name": user["name"], "embedding": embedding})
+        print(f"✅ Loaded {len(registered_users)} users.")
+        return registered_users
+    except Exception as e:
+        print(f"❌ Database Error: {e}")
+        return []
 
-# 4. محاولة الاتصال مع صيد الخطأ لو الرابط لسه فيه مشكلة
-try:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"نقطة الفشل هنا: {e}")
-# حل مشكلة MediaPipe: استدعاء الحلول بطريقة مباشرة
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1)
-
-def get_face_embedding(image_path):
-    """تحويل صورة الوجه لـ embedding"""
-    image = cv2.imread(image_path)
-    if image is None:
-        return None
+# --- 1. Registration (Signup) ---
+def capture_and_register(name):
+    cap = cv2.VideoCapture(0)
+    blinked = False
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
         
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(image_rgb)
+        landmarks = face_recognition.face_landmarks(frame)
+        if landmarks:
+            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
+            # لو الرقم نزل تحت 5.5 (تقدري تغيريه لـ 6.0 لو لسه مش بيلقط)
+            if ear < 5.5: blinked = True 
+            cv2.putText(frame, f"Eye Status: {round(ear, 1)}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
-    if not results.multi_face_landmarks:
-        return None
+        msg = "REAL USER VERIFIED - Press 's'" if blinked else "PLEASE BLINK TO REGISTER"
+        color = (0, 255, 0) if blinked else (0, 0, 255)
+        cv2.putText(frame, msg, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+        cv2.imshow("Secure Signup", frame)
 
-    face_landmarks = results.multi_face_landmarks[0]
-    embedding = []
-    # تقليل عدد النقاط لزيادة السرعة ودقة المقارنة
-    for lm in face_landmarks.landmark:
-        embedding.extend([lm.x, lm.y])
-    return np.array(embedding)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s') and blinked:
+            encodings = face_recognition.face_encodings(frame)
+            if encodings:
+                encrypted_encoding = fernet.encrypt(encodings[0].tobytes()).decode()
+                supabase.table("users").insert({"name": name, "face_embedding": encrypted_encoding}).execute()
+                cap.release(); cv2.destroyAllWindows(); return True
+        elif key == ord('q'): break
+    cap.release(); cv2.destroyAllWindows(); return False
 
-def save_face(name, image_path):
-    embedding = get_face_embedding(image_path)
-    if embedding is None:
-        return {"error": "ما فيش وجه في الصورة"}
+# --- 2. Login (Sign-In) ---
+def live_face_scan():
+    users = load_registered_users()
+    cap = cv2.VideoCapture(0)
+    liveness_verified = False
 
-    # تأكدي إن اسم الجدول في Supabase هو 'faces'
-    try:
-        supabase.table("faces").insert({
-            "name": name,
-            "face_embedding": embedding.tolist()
-        }).execute()
-        return {"success": True, "message": f"تم حفظ وجه {name}"}
-    except Exception as e:
-        return {"error": str(e)}
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+        
+        # كشف الرمش للحيوية
+        landmarks = face_recognition.face_landmarks(frame)
+        if landmarks:
+            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
+            if ear < 5.5: liveness_verified = True
+            cv2.putText(frame, f"Eye: {round(ear, 1)}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
-def recognize_face(image_path):
-    embedding = get_face_embedding(image_path)
-    if embedding is None:
-        return {"matched": False, "error": "ما فيش وجه في الصورة"}
+        # التعرف على الوجه (فقط لو الشخص حقيقي أو بنحدث الحالة)
+        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+        face_locations = face_recognition.face_locations(small_frame)
+        face_encodings = face_recognition.face_encodings(small_frame, face_locations)
 
-    try:
-        response = supabase.table("faces").select("name, face_embedding").execute()
-        faces_data = response.data
+        for face_encoding in face_encodings:
+            for user in users:
+                if face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)[0]:
+                    if liveness_verified:
+                        supabase.table("attendance").insert({"user_name": user["name"], "status": "Present"}).execute()
+                        print(f"✅ Login Success: {user['name']}")
+                        cap.release(); cv2.destroyAllWindows(); return user["name"]
 
-        for face in faces_data:
-            stored_embedding = np.array(face["face_embedding"])
-            # حساب المسافة الإقليدية بين الوجهين
-            distance = np.linalg.norm(stored_embedding - embedding)
-            
-            # الـ threshold (0.4 لـ 0.6) أفضل مع Face Mesh
-            if distance < 0.5:  
-                return {"matched": True, "name": face["name"], "distance": float(distance)}
+        status = "VERIFIED - LOGGING IN..." if liveness_verified else "BLINK TO LOGIN"
+        color = (0, 255, 0) if liveness_verified else (0, 0, 255)
+        cv2.putText(frame, status, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+        cv2.imshow("Secure Login", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+    cap.release(); cv2.destroyAllWindows()
 
-        return {"matched": False, "message": "Try Again"}
-    except Exception as e:
-        return {"error": str(e)}
+# --- 3. Sign-Out ---
+def face_scan_signout():
+    users = load_registered_users()
+    cap = cv2.VideoCapture(0)
+    liveness_verified = False
+
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+        
+        landmarks = face_recognition.face_landmarks(frame)
+        if landmarks:
+            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
+            if ear < 5.5: liveness_verified = True
+
+        if liveness_verified:
+            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            face_encodings = face_recognition.face_encodings(small_frame)
+            for face_encoding in face_encodings:
+                for user in users:
+                    if face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)[0]:
+                        supabase.table("attendance").insert({"user_name": user["name"], "status": "Signed Out"}).execute()
+                        print(f"👋 Sign-out: {user['name']}")
+                        cap.release(); cv2.destroyAllWindows(); return user["name"]
+
+        cv2.putText(frame, "BLINK TO SIGN-OUT", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 165, 255), 2)
+        cv2.imshow("Secure Sign-Out", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+    cap.release(); cv2.destroyAllWindows()

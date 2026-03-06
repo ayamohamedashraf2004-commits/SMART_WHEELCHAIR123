@@ -1,34 +1,24 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-import shutil, os
-from app.services.user_service import save_face, recognize_face
-app = FastAPI()
+from fastapi import FastAPI
+from app.routers import user_router  # تأكدي من المسار الكامل لضمان العمل مع uvicorn
 
-# ربط مجلد static
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app = FastAPI(
+    title="Face Recognition Attendance System",
+    description="نظام التعرف على الوجه المرتبط بقاعدة بيانات Supabase",
+    version="1.0.0"
+)
 
-@app.get("/")
-async def home():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+# ربط الراوتر الخاص بالمستخدمين (الذي يحتوي الآن على مسار تشغيل الكاميرا)
+app.include_router(user_router.router)
 
-@app.post("/register")
-async def register(name: str, file: UploadFile = File(...)):
-    temp_path = f"temp_{file.filename}"
-    with open(temp_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    
-    result = save_face(name, temp_path)
-    os.remove(temp_path)
-    return result
+@app.get("/", tags=["Root"])
+def read_root():
+    return {
+        "message": "Welcome to the Graduation Project API",
+        "status": "Running",
+        "documentation": "/docs"
+    }
 
-@app.post("/recognize")
-async def recognize(file: UploadFile = File(...)):
-    temp_path = f"temp_{file.filename}"
-    with open(temp_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    result = recognize_face(temp_path)
-    os.remove(temp_path)
-    return result
+if __name__ == "__main__":
+    import uvicorn
+    # تشغيل السيرفر محلياً
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)

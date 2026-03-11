@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 from sqlalchemy.sql import func
 
@@ -12,7 +13,8 @@ class User(Base):
     emergency_contact = Column(String, nullable=False) # رقم الطوارئ
     face_embedding = Column(String, nullable=False) 
     
-    # حقول الداشبورد (الحالة والوقت)
+    
     is_active = Column(Boolean, default=True) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    attendances = relationship("Attendance", back_populates="user")

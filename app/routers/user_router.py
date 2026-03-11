@@ -62,31 +62,3 @@ def signout_user_face():
         return {"status": "failed", "message": "Sign-out failed: User not recognized or liveness not verified."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-@router.get("/all")
-def get_all_users():
-    """
-    بيجيب كل المستخدمين ببياناتهم عشان يتعرضوا في الجدول في الداشبورد.
-    """
-    try:
-        response = supabase.table("users").select("name, age, phone, emergency_contact, is_active, created_at, updated_at").execute()
-        return {"status": "success", "data": response.data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
-    
-@router.post("/control/manual")
-def activate_manual_mode():
-    """
-    Endpoint محجوز لتفعيل الوضع اليدوي.
-    سيتم ربطه لاحقاً بأوامر الـ Hardware.
-    """
-    # حالياً بنرجع رد بسيط بس عشان الـ Dashboard متجيبش Error
-    return {"status": "pending", "mode": "manual", "message": "Manual mode signal received"}
-
-@router.post("/control/autonomous")
-def activate_autonomous_mode():
-    """
-    Endpoint محجوز لتفعيل الوضع الذاتي (SLAM/Navigation).
-    سيتم ربطه لاحقاً بـ ROS Nodes.
-    """
-    return {"status": "pending", "mode": "autonomous", "message": "Autonomous mode signal received"}

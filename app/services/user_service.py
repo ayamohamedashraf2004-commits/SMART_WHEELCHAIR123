@@ -25,12 +25,71 @@ def load_registered_users():
             encrypted_data = encrypted.encode() if isinstance(encrypted, str) else encrypted
             decrypted_bytes = fernet.decrypt(encrypted_data)
             embedding = np.frombuffer(decrypted_bytes, dtype=np.float64)
-            registered_users.append({"name": user["name"], "embedding": embedding})
+            registered_users.append({
+    "id": user["id"],
+    "name": user["name"],
+    "embedding": embedding
+})
         print(f"✅ Loaded {len(registered_users)} users.")
         return registered_users
     except Exception as e:
         print(f"❌ Database Error: {e}")
         return []
+    
+    # --- 2. Sign-In (Login) ---
+def live_face_scan():
+    """
+    يفتح الكاميرا، يتأكد من رمش العين (Liveness)، 
+    ثم يقارن الوجه بالداتابيز لتسجيل الحضور.
+    """
+    users = load_registered_users() # تحميل المستخدمين من سوبابيز وفك تشفيرهم
+    cap = cv2.VideoCapture(0)
+    liveness_verified = False
+
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+        
+        # 1. رصد الرمشة (Liveness Check)
+        landmarks = face_recognition.face_landmarks(frame)
+        if landmarks:
+            # حساب معدل فتح العين (EAR)
+            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
+            if ear < 5.5: 
+                liveness_verified = True
+            
+            cv2.putText(frame, f"Eye Status: {round(ear, 1)}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+        # 2. إذا تم التأكد من الشخص أنه "حي" (رمش بعينه)
+        if liveness_verified:
+            # تقليل حجم الفريم لتسريع عملية التعرف
+            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            face_encodings = face_recognition.face_encodings(small_frame)
+            
+            for face_encoding in face_encodings:
+                for user in users:
+                    # مقارنة البصمة الحالية بالبصمات المسجلة
+                    match = face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)[0]
+                    if match:
+                        # تسجيل الدخول في جدول الـ attendance
+                        supabase.table("attendance").insert({
+                            "user_id": user["id"],
+                            "status": "Present"
+                        }).execute()
+                        
+                        print(f"✅ Welcome {user['name']}! Login successful.")
+                        cap.release(); cv2.destroyAllWindows(); return user["name"]
+
+        # واجهة المستخدم
+        msg = "REAL USER VERIFIED - Scanning..." if liveness_verified else "PLEASE BLINK TO LOGIN"
+        color = (0, 255, 0) if liveness_verified else (0, 0, 255)
+        cv2.putText(frame, msg, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+        
+        cv2.imshow("Secure Login", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+    cap.release(); cv2.destroyAllWindows()
+    return None
 
 # --- 1. Registration (Signup) ---
 def capture_and_register(user_data):
@@ -97,7 +156,7 @@ def face_scan_signout():
             for face_encoding in face_encodings:
                 for user in users:
                     if face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)[0]:
-                        supabase.table("attendance").insert({"user_name": user["name"], "status": "Signed Out"}).execute()
+                        supabase.table("attendance").insert({"user_id": user["id"], "status": "Signed Out"}).execute()
                         print(f"👋 Sign-out: {user['name']}")
                         cap.release(); cv2.destroyAllWindows(); return user["name"]
 
@@ -105,3 +164,52 @@ def face_scan_signout():
         cv2.imshow("Secure Sign-Out", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cap.release(); cv2.destroyAllWindows()
+    
+    #-------chair control functions--------------
+def update_chair_target_mode(mode: str):
+    """تحديث الوضع المطلوب (Target) من الداشبورد"""
+    try:
+        # بنعدل الـ target_mode والـ last_ping بيتحث تلقائي في الداتابيز
+        response = supabase.table("chair_control")\
+            .update({"target_mode": mode})\
+            .eq("id", 1)\
+            .execute()
+        
+        if response.data:
+            print(f"✅ Target mode set to: {mode}")
+            return True
+        return False
+    except Exception as e:
+        print(f"❌ Service Error: {e}")
+        return False
+
+def get_chair_status():
+    """جلب حالة الكرسي الحالية لمعرفة هل هو أونلاين ولا لا"""
+    try:
+        response = supabase.table("chair_control").select("*").eq("id", 1).execute()
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"❌ Service Error: {e}")
+        return None
+    
+    #-------navigation functions--------------
+def set_navigation_target(location_name: str):
+    """بتاخد اسم الكلية وتحدث إحداثيات الهدف للكرسي"""
+    try:
+        # 1. نجيب إحداثيات الكلية من جدول المواقع
+        loc_res = supabase.table("campus_locations").select("slam_x, slam_y").eq("name", location_name).execute()
+        if loc_res.data:
+            target = loc_res.data[0]
+            # 2. نحدث جدول التحكم عشان الكرسي يعرف هو رايح فين
+            supabase.table("chair_control").update({
+                "target_x": target["slam_x"],
+                "target_y": target["slam_y"],
+                "target_mode": "Autonomous" # نحوله آلي تلقائياً
+            }).eq("id", 1).execute()
+            return True
+        return False
+    except Exception as e:
+        print(f"❌ Nav Service Error: {e}")
+        return False    

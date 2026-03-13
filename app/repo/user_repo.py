@@ -76,3 +76,4 @@ def update_chair_mode(db: Session, mode: str):
         db.refresh(chair)
         return chair
     return None
+# Requesting code review from  for Navigation & Control Logic.

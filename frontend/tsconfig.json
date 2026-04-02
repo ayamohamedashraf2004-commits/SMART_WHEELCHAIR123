@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] },
+    "jsx": "react-jsx",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": ["src"]
+}

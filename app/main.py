@@ -1,13 +1,20 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from app.routers import user_router, control_router, navigation_router
 from app.core.websocket_manager import manager
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Smart Wheelchair API",
     description="نظام التحكم والملاحة الذكي المرتبط بـ Supabase و ROS",
     version="1.0.0"
 )
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # في مرحلة التطوير بنسمح للكل، بعدين بنحدد بورت الرياكت بس
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # 1. ربط الـ Routers (HTTP)
 app.include_router(user_router.router)
 app.include_router(control_router.router)

@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FaceRecognition from '@/components/auth/FaceRecognition';
-import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import UserInfo from '@/components/dashboard/UserInfo';
 import ControlCommand from '@/components/dashboard/ControlCommand';
-import PathPlanning from '@/components/dashboard/PathPlanning';
+import LeafletMap from '@/components/dashboard/LeafletMap';
 import SensorData from '@/components/dashboard/SensorData';
 import SystemAnalysis from '@/components/dashboard/SystemAnalysis';
 import ObstacleLog from '@/components/dashboard/ObstacleLog';
@@ -27,39 +26,35 @@ const Index: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
-            className="flex flex-col lg:flex-row min-h-screen"
+            className="flex flex-col min-h-screen"
           >
-            <DashboardSidebar />
+            <DashboardHeader />
 
-            <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-              <DashboardHeader />
-
-              <main className="flex-1 p-3 sm:p-4 overflow-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 auto-rows-min">
-                  {/* Row 1 */}
-                  <div className="md:col-span-1 lg:col-span-3">
-                    <UserInfo />
-                  </div>
-                  <div className="md:col-span-1 lg:col-span-5">
-                    <SensorData />
-                  </div>
-                  <div className="md:col-span-2 lg:col-span-4">
-                    <PathPlanning />
-                  </div>
-
-                  {/* Row 2 */}
-                  <div className="md:col-span-1 lg:col-span-3">
-                    <ControlCommand />
-                  </div>
-                  <div className="md:col-span-1 lg:col-span-5">
-                    <ObstacleLog />
-                  </div>
-                  <div className="md:col-span-2 lg:col-span-4">
-                    <SystemAnalysis />
-                  </div>
+            <main className="flex-1 p-3 sm:p-4 overflow-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 auto-rows-min">
+                {/* Row 1: User Info + Sensor Data */}
+                <div className="lg:col-span-3">
+                  <UserInfo />
                 </div>
-              </main>
-            </div>
+                <div className="lg:col-span-5">
+                  <SensorData />
+                </div>
+                <div className="lg:col-span-4">
+                  <ControlCommand />
+                </div>
+
+                {/* Row 2: Map (full width) */}
+                <div className="lg:col-span-8">
+                  <LeafletMap />
+                </div>
+
+                {/* Row 2 side: System + Obstacles */}
+                <div className="lg:col-span-4 flex flex-col gap-3 sm:gap-4">
+                  <SystemAnalysis />
+                  <ObstacleLog />
+                </div>
+              </div>
+            </main>
           </motion.div>
         )}
       </AnimatePresence>

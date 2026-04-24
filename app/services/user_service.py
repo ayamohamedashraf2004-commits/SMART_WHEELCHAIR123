@@ -15,6 +15,7 @@ def get_ear(eye_landmarks):
     bottom = np.mean(eye_landmarks[4:6], axis=0)
     return np.linalg.norm(top - bottom)
 
+
 def load_registered_users():
     try:
         response = supabase.table("users").select("*").execute()
@@ -22,121 +23,101 @@ def load_registered_users():
         registered_users = []
         for user in users_data:
             encrypted = user["face_embedding"]
-            encrypted_data = encrypted.encode() if isinstance(encrypted, str) else encrypted
-            decrypted_bytes = fernet.decrypt(encrypted_data)
-            embedding = np.frombuffer(decrypted_bytes, dtype=np.float64)
-            registered_users.append({
-    "id": user["id"],
-    "name": user["name"],
-    "embedding": embedding
-})
+            try:
+                encrypted_data = encrypted.encode() if isinstance(encrypted, str) else encrypted
+                decrypted_bytes = fernet.decrypt(encrypted_data)
+                embedding = np.frombuffer(decrypted_bytes, dtype=np.float64)
+                registered_users.append({
+                    "id": user["id"],
+                    "name": user["name"],
+                    "embedding": embedding
+                })
+            except Exception as dec_err:
+                print(f"⚠️ Error decrypting user {user.get('name')}: {dec_err}")
+                continue
         print(f"✅ Loaded {len(registered_users)} users.")
         return registered_users
     except Exception as e:
         print(f"❌ Database Error: {e}")
         return []
-    
-    # --- 2. Sign-In (Login) ---
-def live_face_scan():
-    """
-    يفتح الكاميرا، يتأكد من رمش العين (Liveness)، 
-    ثم يقارن الوجه بالداتابيز لتسجيل الحضور.
-    """
-    users = load_registered_users() # تحميل المستخدمين من سوبابيز وفك تشفيرهم
-    cap = cv2.VideoCapture(0)
-    liveness_verified = False
 
-    while True:
-        ret, frame = cap.read()
-        if not ret: break
-        
-        # 1. رصد الرمشة (Liveness Check)
-        landmarks = face_recognition.face_landmarks(frame)
-        if landmarks:
-            # حساب معدل فتح العين (EAR)
-            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
-            if ear < 5.5: 
-                liveness_verified = True
-            
-            cv2.putText(frame, f"Eye Status: {round(ear, 1)}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-
-        # 2. إذا تم التأكد من الشخص أنه "حي" (رمش بعينه)
-        if liveness_verified:
-            # تقليل حجم الفريم لتسريع عملية التعرف
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            face_encodings = face_recognition.face_encodings(small_frame)
-            
-            for face_encoding in face_encodings:
-                for user in users:
-                    # مقارنة البصمة الحالية بالبصمات المسجلة
-                    match = face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)[0]
-                    if match:
-                        # تسجيل الدخول في جدول الـ attendance
-                        supabase.table("attendance").insert({
-                            "user_id": user["id"],
-                            "status": "Present"
-                        }).execute()
-                        
-                        print(f"✅ Welcome {user['name']}! Login successful.")
-                        cap.release(); cv2.destroyAllWindows(); return user["name"]
-
-        # واجهة المستخدم
-        msg = "REAL USER VERIFIED - Scanning..." if liveness_verified else "PLEASE BLINK TO LOGIN"
-        color = (0, 255, 0) if liveness_verified else (0, 0, 255)
-        cv2.putText(frame, msg, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        
-        cv2.imshow("Secure Login", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'): break
-
-    cap.release(); cv2.destroyAllWindows()
-    return None
-
-# --- 1. Registration (Signup) ---
+# --- 1. Registration (Signup) المعدلة ---
 def capture_and_register(user_data):
-    """
-    user_data: dictionary contains {name, age, phone, emergency_contact}
-    """
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        return False
+
     blinked = False
+    print(f"Starting registration for: {user_data['name']}")
+
     while True:
         ret, frame = cap.read()
-        if not ret: break
+        if not ret: 
+            break
+
+        # 1. تحويل الصورة إلى RGB
+        # 1. تحويل الصورة
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        landmarks = face_recognition.face_landmarks(frame)
-        if landmarks:
-            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
-            if ear < 5.5: blinked = True 
-            cv2.putText(frame, f"Eye Status: {round(ear, 1)}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        # 2. البحث عن الـ Landmarks
+        face_landmarks_list = face_recognition.face_landmarks(rgb_frame)
 
-        msg = "REAL USER VERIFIED - Press 's'" if blinked else "PLEASE BLINK TO REGISTER"
-        color = (0, 255, 0) if blinked else (0, 0, 255)
-        cv2.putText(frame, msg, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        cv2.imshow("Secure Signup", frame)
-
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('s') and blinked:
-            encodings = face_recognition.face_encodings(frame)
-            if encodings:
-                encrypted_encoding = fernet.encrypt(encodings[0].tobytes()).decode()
+        if face_landmarks_list:
+            # نأخذ أول وجه يظهر في الكاميرا
+            face_marks = face_landmarks_list 
+            
+            if 'left_eye' in face_marks and 'right_eye' in face_marks:
+                left_eye = face_marks['left_eye']
+                right_eye = face_marks['right_eye']
                 
-                # --- التعديل هنا لإضافة كل البيانات الجديدة ---
-                new_user_payload = {
+                # حساب الـ EAR
+                current_ear = (get_ear(left_eye) + get_ear(right_eye)) / 2
+                
+                # السطر ده هيخليكي تشوفي الرقم في الـ Terminal عشان تعرفي المشكلة فين
+                print(f"DEBUG: Eye Aspect Ratio: {current_ear:.2f}")
+
+                # جربي رفع الرقم لـ 0.3 إذا كانت الحساسية ضعيفة
+                if current_ear < 0.25: 
+                    blinked = True
+                    print("✅ Blink Detected!")
+
+        # 3. واجهة المستخدم (UI)
+        status_color = (0, 255, 0) if blinked else (0, 0, 255)
+        status_msg = "READY: Press 'S' to Save" if blinked else "BLINK TO VERIFY"
+        
+        cv2.putText(frame, status_msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+        cv2.imshow("Registration", frame)
+        
+        key = cv2.waitKey(1) & 0xFF
+
+        # حفظ البيانات عند الضغط على S بشرط حدوث الرمشة (للتأكد أنه إنسان حقيقي)
+        if key == ord('s') and blinked:
+            encodings = face_recognition.face_encodings(rgb_frame)
+            if encodings:
+                # تحويل الـ encoding لمصفوفة numpy ثم bytes للتخزين
+                encoding_bytes = np.array(encodings).tobytes()
+                encrypted_encoding = fernet.encrypt(encoding_bytes).decode()
+                
+                new_user = {
                     "name": user_data["name"],
                     "age": user_data["age"],
                     "phone": user_data["phone"],
                     "emergency_contact": user_data["emergency_contact"],
-                    "face_embedding": encrypted_encoding,
-                    "is_active": True # الحساب مفعل تلقائياً
+                    "face_embedding": encrypted_encoding
                 }
-                
-                supabase.table("users").insert(new_user_payload).execute()
-                print(f"✅ User {user_data['name']} registered with full info.")
-                cap.release(); cv2.destroyAllWindows(); return True
-        elif key == ord('q'): break
-    cap.release(); cv2.destroyAllWindows(); return False
+                supabase.table("users").insert(new_user).execute()
+                print("✅ Saved to database!")
+                break 
+        
+        elif key == ord('q'):
+            break
 
-# --- 3. Sign-Out ---
-def face_scan_signout():
+    cap.release()
+    cv2.destroyAllWindows()
+    return True
+# --- 2. Login (تم تعديله ليكون متوافق) ---
+def live_face_scan():
     users = load_registered_users()
     cap = cv2.VideoCapture(0)
     liveness_verified = False
@@ -145,26 +126,60 @@ def face_scan_signout():
         ret, frame = cap.read()
         if not ret: break
         
-        landmarks = face_recognition.face_landmarks(frame)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        landmarks = face_recognition.face_landmarks(rgb_frame)
+        
         if landmarks:
-            ear = (get_ear(landmarks[0]['left_eye']) + get_ear(landmarks[0]['right_eye'])) / 2
-            if ear < 5.5: liveness_verified = True
+            face_marks = landmarks
+            ear = (get_ear(face_marks['left_eye']) + get_ear(face_marks['right_eye'])) / 2
+            if ear < 0.25: 
+                liveness_verified = True
 
         if liveness_verified:
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            # تصغير الفريم للسرعة
+            small_frame = cv2.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
             face_encodings = face_recognition.face_encodings(small_frame)
+            
             for face_encoding in face_encodings:
                 for user in users:
-                    if face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)[0]:
-                        supabase.table("attendance").insert({"user_id": user["id"], "status": "Signed Out"}).execute()
-                        print(f"👋 Sign-out: {user['name']}")
-                        cap.release(); cv2.destroyAllWindows(); return user["name"]
+                    # مقارنة
+                    matches = face_recognition.compare_faces([user["embedding"]], face_encoding, 0.5)
+                    if matches:
+                        try:
+                            supabase.table("attendance").insert({
+                                "user_id": user["id"],
+                                "status": "Present"
+                            }).execute()
+                            print(f"✅ Welcome {user['name']}!")
+                            cap.release(); cv2.destroyAllWindows(); return user["name"]
+                        except Exception as e:
+                            print(f"⚠️ Attendance Error: {e}")
 
-        cv2.putText(frame, "BLINK TO SIGN-OUT", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 165, 255), 2)
-        cv2.imshow("Secure Sign-Out", frame)
+        cv2.imshow("Secure Login", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
+
     cap.release(); cv2.destroyAllWindows()
-    
+    return None
+
+# ... (باقي دوال التحكم والـ Navigation سيبيهم زي ما هما)
+
+# --- 3. Sign-Out ---
+def process_logout(user_id: int):
+    """تسجيل خروج المستخدم في الداتابيز بدون كاميرا"""
+    try:
+        # تسجيل حالة الخروج في جدول الـ attendance
+        response = supabase.table("attendance").insert({
+            "user_id": user_id,
+            "status": "Signed Out"
+        }).execute()
+        
+        if response.data:
+            print(f"✅ User {user_id} signed out successfully.")
+            return True
+        return False
+    except Exception as e:
+        print(f"❌ Logout Service Error: {e}")
+        return False
     #-------chair control functions--------------
 def update_chair_target_mode(mode: str):
     """تحديث الوضع المطلوب (Target) من الداشبورد"""

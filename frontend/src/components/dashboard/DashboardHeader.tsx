@@ -1,16 +1,25 @@
 import React from 'react';
-import { Search, Bell, ChevronDown, LogOut, Accessibility } from 'lucide-react';
+import { ChevronDown, LogOut, Accessibility } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import type { UserProfile } from '@/services/api';
 
-const DashboardHeader: React.FC = () => {
+interface DashboardHeaderProps {
+  user: UserProfile | null;
+  onLogout: () => void;
+}
+
+const DashboardHeader: React.FC<DashboardHeaderProps> = ({ user, onLogout }) => {
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : 'XX';
+
   return (
     <header className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface glow-border">
-      {/* Left: Logo */}
       <div className="flex items-center gap-2.5">
         <div className="p-1.5 rounded-lg bg-primary/10 glow-cyan">
           <Accessibility size={20} className="text-primary" />
@@ -23,40 +32,25 @@ const DashboardHeader: React.FC = () => {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="hidden md:flex flex-1 max-w-md mx-4 lg:mx-8">
-        <div className="relative w-full">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search systems..."
-            className="w-full h-8 pl-9 pr-4 bg-secondary rounded-lg text-xs font-mono text-foreground placeholder:text-muted-foreground border-none outline-none focus:ring-1 focus:ring-primary/30"
-          />
-        </div>
-      </div>
-
-      {/* Right */}
-      <div className="flex items-center gap-2 sm:gap-4">
-        <button className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-primary transition-colors">
-          <Bell size={16} />
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
-        </button>
-
+      <div className="flex items-center">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 pl-2 sm:pl-4 border-l border-primary/10 outline-none">
+            <button className="flex items-center gap-2 outline-none">
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-mono text-xs font-bold">
-                AM
+                {initials}
               </div>
               <div className="hidden sm:block text-left">
-                <p className="text-xs font-mono text-foreground">Aya Mohamed</p>
+                <p className="text-xs font-mono text-foreground">{user?.name || 'Unknown'}</p>
                 <p className="text-[10px] font-mono text-muted-foreground">OPERATOR</p>
               </div>
               <ChevronDown size={14} className="text-muted-foreground hidden sm:block" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-surface border-primary/20">
-            <DropdownMenuItem className="text-xs font-mono text-destructive cursor-pointer focus:text-destructive focus:bg-destructive/10">
+            <DropdownMenuItem
+              onClick={onLogout}
+              className="text-xs font-mono text-destructive cursor-pointer focus:text-destructive focus:bg-destructive/10"
+            >
               <LogOut size={14} className="mr-2" />
               Logout
             </DropdownMenuItem>

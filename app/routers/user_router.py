@@ -1,20 +1,16 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.user_service import live_face_scan, capture_and_register, face_scan_signout
-
+from app.services.user_service import live_face_scan, capture_and_register, process_logout
 router = APIRouter(prefix="/users", tags=["Users"])
 
+from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool # استيراد المكتبة المهمة
+from app.services.user_service import capture_and_register
+
+router = APIRouter()
+
 @router.post("/signup-scan")
-def signup_via_scan(
-    name: str = Query(..., description="الاسم بالكامل"),
-    age: int = Query(..., description="السن"),
-    phone: str = Query(..., description="رقم التليفون"),
-    emergency_contact: str = Query(..., description="رقم الطوارئ")
-):
-    """
-    يفتح الكاميرا لتسجيل مستخدم جديد ببياناته الكاملة.
-    يجب رمش العين (Blink) لتفعيل زر الحفظ 's'.
-    """
-    # تجميع البيانات في قاموس واحد لبعتها للـ Service
+async def signup_via_scan(name: str, age: int, phone: str, emergency_contact: str):
+    # 1. تجميع البيانات
     user_info = {
         "name": name,
         "age": age,
@@ -22,19 +18,20 @@ def signup_via_scan(
         "emergency_contact": emergency_contact
     }
     
-    # نداء الدالة المعدلة في الـ Service
-    success = capture_and_register(user_info)
-    
-    if success:
-        return {
-            "status": "success", 
-            "message": f"User {name} registered with full details and liveness verification."
-        }
+    try:
+        # 2. تشغيل الدالة في Thread منفصل عشان السيرفر ميهنجش والاتصال ميفصلش
+        # لاحظي استخدام await و run_in_threadpool
+        success = await run_in_threadpool(capture_and_register, user_info)
         
-    raise HTTPException(status_code=400, detail="Registration failed. Liveness not verified or cancelled.")
-
-# دالات الـ Login والـ Signout زي ما هي تمام لأنها بتعتمد على بصمة الوجه فقط
-
+        if success:
+            return {"message": f"User {name} registered successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Registration failed or cancelled")
+            
+    except Exception as e:
+        print(f"Error during scan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @router.get("/login")
 def login_user_face():
     """
@@ -49,16 +46,10 @@ def login_user_face():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
 
-@router.get("/signout")
-def signout_user_face():
-    """
-    يفتح الكاميرا لتسجيل الانصراف (Attendance: Signed Out).
-    ملاحظة: يتطلب رمش العين للتحقق من الهوية الحقيقية.
-    """
-    try:
-        user_name = face_scan_signout()
-        if user_name:
-            return {"status": "success", "message": f"Goodbye {user_name}, sign-out recorded."}
-        return {"status": "failed", "message": "Sign-out failed: User not recognized or liveness not verified."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/logout")
+def logout(user_id: int):
+    success = process_logout(user_id)
+    if success:
+        return {"message": "Logged out successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Logout failed")

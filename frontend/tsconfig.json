@@ -1,12 +1,24 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] },
-    "jsx": "react-jsx",
-    "moduleResolution": "node",
     "allowJs": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "strictNullChecks": false
   },
-  "include": ["src"]
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }

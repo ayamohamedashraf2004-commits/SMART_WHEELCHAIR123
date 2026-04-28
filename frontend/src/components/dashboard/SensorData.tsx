@@ -10,11 +10,9 @@ const generateData = () => {
     const time = `${String(10).padStart(2, '0')}:${String(i).padStart(2, '0')}`;
     data.push({
       time,
-      velocity: +(1 + Math.random() * 1.5).toFixed(1),
-      proximity: +(0.5 + Math.random() * 3).toFixed(1),
-      heading: +(Math.random() * 360).toFixed(0),
-      cpu: +(30 + Math.random() * 40).toFixed(0),
-      latency: +(5 + Math.random() * 25).toFixed(0),
+      velocity: +(1 + Math.random() * 1.5).toFixed(1), // السرعة
+      battery: +(80 - Math.random() * 10).toFixed(0), // البطارية (افتراضي)
+      distance: +(0.5 + Math.random() * 3).toFixed(1), // المسافة (عوضاً عن proximity)
     });
   }
   return data;
@@ -29,10 +27,8 @@ const SensorData: React.FC = () => {
         const newPoint = {
           time: `10:${String(prev.length).padStart(2, '0')}`,
           velocity: +(1 + Math.random() * 1.5).toFixed(1),
-          proximity: +(0.5 + Math.random() * 3).toFixed(1),
-          heading: +(Math.random() * 360).toFixed(0),
-          cpu: +(30 + Math.random() * 40).toFixed(0),
-          latency: +(5 + Math.random() * 25).toFixed(0),
+          battery: +(Math.max(0, (prev[prev.length - 1]?.battery || 100) - 0.1)).toFixed(1),
+          distance: +(0.5 + Math.random() * 3).toFixed(1),
         };
         return [...prev.slice(-19), newPoint];
       });
@@ -44,7 +40,7 @@ const SensorData: React.FC = () => {
     <div className="bg-surface p-3.5 rounded-xl glow-border h-full">
       <div className="flex items-center gap-2 mb-3">
         <Activity size={12} className="text-primary" />
-        <h3 className="text-[9px] font-mono font-bold uppercase tracking-widest text-foreground">REAL_TIME SENSOR DATA</h3>
+        <h3 className="text-[9px] font-mono font-bold uppercase tracking-widest text-foreground">SYSTEM MONITOR</h3>
       </div>
 
       <div className="h-[180px]">
@@ -80,22 +76,20 @@ const SensorData: React.FC = () => {
               wrapperStyle={{ fontSize: '9px', fontFamily: 'Geist Mono, monospace' }}
               iconSize={8}
             />
-            <Line type="monotone" dataKey="velocity" stroke="#22D3EE" strokeWidth={2} dot={false} name="Velocity" />
-            <Line type="monotone" dataKey="proximity" stroke="#4ADE80" strokeWidth={2} dot={false} name="Proximity" />
-            <Line type="monotone" dataKey="cpu" stroke="#F59E0B" strokeWidth={1.5} dot={false} name="CPU Load" />
-            <Line type="monotone" dataKey="latency" stroke="#F43F5E" strokeWidth={1.5} dot={false} name="Latency" />
+            {/* عرض 3 خطوط فقط */}
+            <Line type="monotone" dataKey="velocity" stroke="#22D3EE" strokeWidth={2} dot={false} name="Velocity (m/s)" />
+            <Line type="monotone" dataKey="battery" stroke="#4ADE80" strokeWidth={2} dot={false} name="Battery (%)" />
+            <Line type="monotone" dataKey="distance" stroke="#F59E0B" strokeWidth={1.5} dot={false} name="Distance (m)" />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Sensor Stats Row */}
-      <div className="grid grid-cols-5 gap-1.5 mt-3">
+      {/* Sensor Stats Row - عرض 3 مربعات فقط */}
+      <div className="grid grid-cols-3 gap-1.5 mt-3">
         {[
           { label: 'VELOCITY', value: `${data[data.length - 1]?.velocity ?? 0}`, unit: 'm/s' },
-          { label: 'PROXIMITY', value: `${data[data.length - 1]?.proximity ?? 0}`, unit: 'cm' },
-          { label: 'HEADING', value: `${data[data.length - 1]?.heading ?? 0}`, unit: '°' },
-          { label: 'CPU LOAD', value: `${data[data.length - 1]?.cpu ?? 0}`, unit: '%' },
-          { label: 'LATENCY', value: `${data[data.length - 1]?.latency ?? 0}`, unit: 'ms' },
+          { label: 'BATTERY', value: `${data[data.length - 1]?.battery ?? 0}`, unit: '%' },
+          { label: 'DISTANCE', value: `${data[data.length - 1]?.distance ?? 0}`, unit: 'm' },
         ].map((stat) => (
           <div key={stat.label} className="bg-background rounded-lg p-1.5 text-center glow-border">
             <p className="text-[7px] font-mono text-muted-foreground uppercase">{stat.label}</p>

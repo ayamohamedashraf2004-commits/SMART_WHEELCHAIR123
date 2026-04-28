@@ -1,106 +1,102 @@
-// 1. تصحيح الـ URL الأساسي (شيلنا /api لأن الباك إند مش بيستخدمها)
-const API_URL = import.meta.env.VITE_API_URL|| 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 export interface UserProfile {
-  id: number; // غيرناها لـ number لأن سوبابيز بيدي ID رقمي
+  id: number;
   name: string;
   age: number;
   phone: string;
   emergency_contact: string;
   status?: string;
-  face_embedding?: string; // متخزن كـ string مشفر في الداتابيز
+  face_embedding?: string;
+  created_at?: string;   // ✅ من Supabase — ISO string مثل "2026-03-11T19:43:01.881+00:00"
+  updated_at?: string;   // ✅ من Supabase
+  last_attendance?: string;
 }
 
+// ✅ Fix: كانت مش متعرفة هنا وبيتم import عليها في FaceRecognition.tsx
+export interface SignupData {
+  name: string;
+  age: number;
+  phone: string;
+  emergency_contact: string;
+}
+
+// ─── API ──────────────────────────────────────────────────────────────────────
 export const api = {
-  
-  // --- تسجيل مستخدم جديد (Signup) ---
-  async signup(data: {
-    name: string;
-    age: number;
-    phone: string;
-    emergency_contact: string;
-  }): Promise<boolean> {
-    try {
-      // إرسال البيانات كـ Query Parameters زي ما الـ Swagger طالب بالظبط
-      const queryParams = new URLSearchParams({
-        name: data.name,
-        age: data.age.toString(),
-        phone: data.phone,
-        emergency_contact: data.emergency_contact
-      });
 
-      const res = await fetch(`${API_URL}/users/signup-scan?${queryParams}`, {
-        method: 'POST',
-        headers: { 'accept': 'application/json' }
-        // الـ Body هنا فاضي لأن الداتا في اللينك
-      });
+  /**
+   * تسجيل دخول بالوجه من المتصفح.
+   * بيستقبل صورة JPEG كـ Blob من الـ Webcam ويبعتها للـ Backend.
+   */
+  async login(imageBlob: Blob): Promise<UserProfile> {
+    const formData = new FormData();
+    formData.append('image', imageBlob, 'face.jpg');
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'فشل عملية التسجيل');
-      }
+    const res = await fetch(`${API_URL}/users/login-web`, {
+      method: 'POST',
+      body: formData,
+    });
 
-      return true;
-    } catch (error: any) {
-      console.error("Signup Error:", error.message);
-      throw error;
+    if (res.status === 401) {
+      throw new Error('Face not recognized. Please register first.');
     }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Login failed');
+    }
+
+    const data: UserProfile = await res.json();
+    localStorage.setItem('wheelchair_user', JSON.stringify(data));
+    return data;
   },
 
-  // --- تسجيل الدخول بالوجه (Login) ---
-  async faceLogin(): Promise<UserProfile> {
-    try {
-      // إحنا بننادي الـ endpoint اللي بيفتح الكاميرا في الباك إند
-      const res = await fetch(`${API_URL}/users/login-scan`, {
-        method: 'POST',
-        headers: { 'accept': 'application/json' }
-      });
+  /**
+   * تسجيل مستخدم جديد من المتصفح.
+   * بيبعت بيانات المستخدم + صورة من الـ Webcam.
+   */
+  async signup(data: SignupData, imageBlob: Blob): Promise<boolean> {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('age', data.age.toString());
+    formData.append('phone', data.phone);
+    formData.append('emergency_contact', data.emergency_contact);
+    formData.append('image', imageBlob, 'face.jpg');
 
-      if (res.status === 401) {
-        throw new Error('الوجه غير مسجل، برجاء التسجيل أولاً');
-      }
+    const res = await fetch(`${API_URL}/users/signup-web`, {
+      method: 'POST',
+      body: formData,
+    });
 
-      if (!res.ok) {
-        throw new Error('فشل تسجيل الدخول بالوجه');
-      }
-
-      const data = await res.json();
-      
-      // حفظ بيانات المستخدم في المتصفح عشان نستخدمها في الداشبورد
-      localStorage.setItem('wheelchair_user', JSON.stringify(data));
-
-      return data;
-    } catch (error: any) {
-      console.error("Login Error:", error.message);
-      throw error;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Signup failed');
     }
+    return true;
   },
 
-  // --- تسجيل الخروج (Logout) ---
+  /**
+   * تسجيل خروج المستخدم
+   */
   async signout(): Promise<void> {
     try {
       const user = this.getCurrentUser();
-      const userId = user?.id;
-
-      // 1. مسح البيانات محلياً أولاً
       localStorage.removeItem('wheelchair_user');
-
-      // 2. إبلاغ الباك إند بالخروج لو فيه ID
-      if (userId) {
-        await fetch(`${API_URL}/users/logout?user_id=${userId}`, {
+      if (user?.id) {
+        await fetch(`${API_URL}/users/logout?user_id=${user.id}`, {
           method: 'POST',
         });
       }
-      
-      console.log("User logged out successfully");
-      // توجيه لصفحة اللوجين
-      window.location.href = '/login';
     } catch (error) {
-      console.error("Signout Error:", error);
+      console.error('Signout Error:', error);
     }
+    // ✅ Fix: مش بنعمل redirect لـ /login (مش موجود كـ route)
+    // الـ Index.tsx هو اللي بيتحكم في الـ state
   },
 
-  // --- الحصول على بيانات المستخدم الحالي ---
+  /**
+   * جلب بيانات المستخدم من الـ localStorage
+   */
   getCurrentUser(): UserProfile | null {
     const stored = localStorage.getItem('wheelchair_user');
     if (!stored) return null;
@@ -109,5 +105,5 @@ export const api = {
     } catch {
       return null;
     }
-  }
+  },
 };

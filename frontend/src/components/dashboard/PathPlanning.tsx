@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Navigation, Clock, Ruler, AlertTriangle, CheckCircle } from 'lucide-react';
 
-const locations = ['Gate1', 'AI Lab', 'Dentistry', 'Library', 'Main Hall', 'Cafeteria', 'Parking A'];
+const locations = ['University Main Area', 
+  'Faculty of Pharmacy',
+   'Faculty of Applied Arts',
+   'Faculty of Engineering',
+    'Faculty of Fine Arts', 
+    'Old Faculty of Pharmacy', 
+    'Faculty of Artificial Intelligence',
+     "Faculty of Al-Alsun and Languages",
+     "Faculty of Business Administration"];
 
 const PathPlanning: React.FC = () => {
   const [origin, setOrigin] = useState('');

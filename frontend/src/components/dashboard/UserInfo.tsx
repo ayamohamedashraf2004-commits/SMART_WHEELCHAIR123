@@ -61,13 +61,13 @@ const UserInfo: React.FC<UserInfoProps> = ({ user }) => {
         />
 
         <InfoRow
-          label="CREATED"
+          label="created_at"
           value={user?.created_at ? user.created_at.slice(0, 10) : '--'}
           icon={<Calendar size={10} />}
         />
 
         <InfoRow
-          label="UPDATED"
+          label="updated_at"
           value={user?.updated_at ? user.updated_at.slice(0, 10) : '--'}
           icon={<Clock size={10} />}
         />

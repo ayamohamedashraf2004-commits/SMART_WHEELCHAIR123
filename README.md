@@ -85,6 +85,9 @@ npm run dev
 ## 🔒 Security Philosophy
 * **Zero-Trust Biometrics:** Access is strictly granted only after verifying human liveness through blink detection (EAR < 0.2).
 * **Data Masking:** Sensitive face vectors are **never** stored in raw format; they are serialized and encrypted before reaching the cloud to ensure user privacy.
+  
+Developed as part of the Graduation Project @ Egyptian Russian University.
+
 
 
 ---

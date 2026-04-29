@@ -35,8 +35,6 @@ def load_registered_users():
                     "age":               user.get("age"),
                     "phone":             user.get("phone"),
                     "emergency_contact": user.get("emergency_contact"),
-                    "created_at":        user.get("created_at"),   # ✅
-                    "updated_at":        user.get("updated_at"),   # ✅
                     "embedding":         embedding
                 })
             except Exception as dec_err:
@@ -98,6 +96,25 @@ def web_face_login(image_bytes: bytes) -> dict | None:
                 except Exception as e:
                     print(f"⚠️ Attendance Error: {e}")
 
+                # جلب آخر تسجيل دخول سابق من جدول attendance
+                last_login = None
+                try:
+                    att_res = supabase.table("attendance") \
+                        .select("created_st") \
+                        .eq("user_id", str(user["id"])) \
+                        .eq("status", "Present") \
+                        .order("created_st", desc=True) \
+                        .limit(2) \
+                        .execute()
+                    # أول نتيجة هي اللوجين الحالي، التانية هي السابق
+                    rows = att_res.data or []
+                    if len(rows) >= 2:
+                        last_login = rows[1]["created_st"]
+                    elif len(rows) == 1:
+                        last_login = rows[0]["created_st"]
+                except Exception as e:
+                    print(f"⚠️ Last-login fetch error: {e}")
+
                 print(f"✅ Welcome {user['name']}!")
                 return {
                     "id":                user["id"],
@@ -106,8 +123,7 @@ def web_face_login(image_bytes: bytes) -> dict | None:
                     "phone":             user["phone"],
                     "emergency_contact": user["emergency_contact"],
                     "status":            "Present",
-                    "created_at":        user.get("created_at"),   # ✅ من Supabase
-                    "updated_at":        user.get("updated_at"),   # ✅ من Supabase
+                    "last_login":        last_login,   # ✅ من attendance
                 }
 
     print("⚠️ Face not recognized.")

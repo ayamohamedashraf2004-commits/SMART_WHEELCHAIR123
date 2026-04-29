@@ -1,4 +1,5 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Path, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from app.routers import user_router, control_router, navigation_router
 from app.core.websocket_manager import manager
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +9,8 @@ app = FastAPI(
     description="نظام التحكم والملاحة الذكي المرتبط بـ Supabase و ROS",
     version="1.0.0"
 )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # في مرحلة التطوير بنسمح للكل، بعدين بنحدد بورت الرياكت بس

@@ -17,18 +17,25 @@ function getEAR(eye: faceapi.Point[]): number {
   return (A + B) / (2.0 * C);
 }
 
-const EAR_THRESHOLD = 0.21;
-const BLINK_FRAMES  = 2;
+const EAR_OPEN_THRESHOLD   = 0.25;  // فوق الرقم ده = عين مفتوحة
+const EAR_CLOSED_THRESHOLD = 0.20;  // تحت الرقم ده = عين مغلقة
+const MIN_OPEN_FRAMES       = 5;    // لازم العين تكون مفتوحة قبل الرمشة
+const MIN_CLOSED_FRAMES     = 2;    // لازم تتقفل frames كافية
 
 interface FaceRecognitionProps {
   onAuthenticated: (user: UserProfile) => void;
 }
 
 const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) => {
-  const webcamRef   = useRef<Webcam>(null);
-  const rafRef      = useRef<number>(0);
-  const closedFrames = useRef(0);
-  const blinkRunning = useRef(false);
+  const webcamRef      = useRef<Webcam>(null);
+  const rafRef         = useRef<number>(0);
+  const blinkRunning   = useRef(false);
+
+  // ── Liveness state machine ────────────────────────────────────────────────
+  // المراحل: WAITING_OPEN → SAW_OPEN → SAW_CLOSED → BLINK_CONFIRMED
+  const openFrames    = useRef(0);   // كام frame العين كانت مفتوحة
+  const closedFrames  = useRef(0);   // كام frame العين كانت مغلقة
+  const sawOpen       = useRef(false); // شوفنا عين مفتوحة كفاية؟
 
   const [modelsLoaded,  setModelsLoaded]  = useState(false);
   const [blinkDetected, setBlinkDetected] = useState(false);
@@ -62,11 +69,15 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     return () => { cancelAnimationFrame(rafRef.current); blinkRunning.current = false; };
   }, []);
 
-  // ── Blink detection loop ──────────────────────────────────────────────────────
+  // ── Blink detection loop (Liveness-safe) ─────────────────────────────────
   const startBlinkLoop = useCallback(() => {
     if (!modelsLoaded || blinkRunning.current) return;
     blinkRunning.current = true;
+
+    // reset liveness state
+    openFrames.current   = 0;
     closedFrames.current = 0;
+    sawOpen.current      = false;
 
     const detect = async () => {
       if (!blinkRunning.current) return;
@@ -84,28 +95,54 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
       if (!detection) {
         setFaceFound(false);
         setEarValue(null);
+        // لو الوجه اختفى نرجع البداية للسلامة
+        openFrames.current   = 0;
+        closedFrames.current = 0;
+        sawOpen.current      = false;
         rafRef.current = requestAnimationFrame(detect);
         return;
       }
 
       setFaceFound(true);
-      const pts = detection.landmarks.positions;
+      const pts      = detection.landmarks.positions;
       const leftEye  = pts.slice(36, 42);
       const rightEye = pts.slice(42, 48);
-      const ear = (getEAR(leftEye) + getEAR(rightEye)) / 2;
+      const ear      = (getEAR(leftEye) + getEAR(rightEye)) / 2;
       setEarValue(parseFloat(ear.toFixed(3)));
 
-      if (ear < EAR_THRESHOLD) {
+      // ── State machine ─────────────────────────────────────────────────────
+      if (ear >= EAR_OPEN_THRESHOLD) {
+        // عين مفتوحة
+        closedFrames.current = 0;
+        openFrames.current  += 1;
+
+        if (openFrames.current >= MIN_OPEN_FRAMES) {
+          sawOpen.current = true; // ✅ مرحلة 1: تأكدنا العين كانت مفتوحة فعلاً
+        }
+
+        // مرحلة 3: بعد ما اتقفلت، فتحت تاني = رمشة حقيقية ✅
+        if (sawOpen.current && closedFrames.current === 0 && openFrames.current === 1) {
+          // (openFrames reset to 1 means just reopened after being closed)
+        }
+
+      } else if (ear < EAR_CLOSED_THRESHOLD && sawOpen.current) {
+        // عين مغلقة — بس بعد ما شوفنا عين مفتوحة كفاية (منع false positive)
         closedFrames.current += 1;
-      } else {
-        if (closedFrames.current >= BLINK_FRAMES) {
+        openFrames.current    = 0;
+
+        if (closedFrames.current >= MIN_CLOSED_FRAMES) {
+          // ✅ مرحلة 2 اكتملت: رمشة حقيقية اتكشفت!
           blinkRunning.current = false;
           cancelAnimationFrame(rafRef.current);
           setBlinkCount(c => c + 1);
           setBlinkDetected(true);
           return;
         }
-        closedFrames.current = 0;
+      } else {
+        // منطقة رمادية بين الاتنين — مستنيين
+        if (ear >= EAR_OPEN_THRESHOLD) {
+          closedFrames.current = 0;
+        }
       }
 
       rafRef.current = requestAnimationFrame(detect);
@@ -143,6 +180,10 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     setStatus('BLINK_VERIFIED ✓  CAPTURING');
 
     await new Promise(r => setTimeout(r, 400));
+
+    // ✅ احفظ الصورة كـ data URL قبل الإرسال
+    const photoUrl = webcamRef.current?.getScreenshot() ?? null;
+
     const blob = captureFrame();
     if (!blob) {
       setError('Could not capture image.');
@@ -154,6 +195,8 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     setProgress(65); setStatus('VERIFYING_IDENTITY');
     try {
       const user = await api.login(blob);
+      // ✅ أضف الصورة للـ user object قبل ما تبعته للـ Dashboard
+      if (photoUrl) user.photo_url = photoUrl;
       setProgress(100); setStatus('AUTHENTICATED ✓');
       setTimeout(() => onAuthenticated(user), 600);
     } catch (err: any) {
@@ -184,7 +227,7 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
 
   const earColor = earValue === null
     ? 'text-muted-foreground'
-    : earValue < EAR_THRESHOLD ? 'text-amber-400' : 'text-accent';
+    : earValue < EAR_OPEN_THRESHOLD ? 'text-amber-400' : 'text-accent';
 
   // ══════════════════════════════════════════════════════════════════════════════
   // Signup screen

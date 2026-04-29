@@ -9,9 +9,8 @@ export interface UserProfile {
   emergency_contact: string;
   status?: string;
   face_embedding?: string;
-  created_at?: string;   // ✅ من Supabase — ISO string مثل "2026-03-11T19:43:01.881+00:00"
-  updated_at?: string;   // ✅ من Supabase
-  last_attendance?: string;
+  last_login?: string;    // ✅ آخر تسجيل دخول من جدول attendance
+  photo_url?: string;     // ✅ صورة ملتقطة وقت اللوجين (data URL)
 }
 
 // ✅ Fix: كانت مش متعرفة هنا وبيتم import عليها في FaceRecognition.tsx

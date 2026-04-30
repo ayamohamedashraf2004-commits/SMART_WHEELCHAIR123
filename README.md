@@ -10,7 +10,7 @@ The **Smart Wheelchair** is an integrated ecosystem designed to bridge the gap b
 
 | Feature | Description |
 | :--- | :--- |
-| **Biometric Authentication** | Secure login using **Face Recognition** with **Liveness Detection** (Eye Blink verification). |
+| **Biometric Authentication** | Secure login using **Face Recognition** with **Liveness Detection** (______________). |
 | **Dual-Mode Navigation** | Toggle between **Manual control** and **Autonomous navigation** to pre-mapped destinations. |
 | **Real-time Telemetry** | Live streaming of battery levels, velocity, and GPS coordinates via **WebSockets**. |
 | **Cloud Synchronized** | Centralized management of user attendance and status using **Supabase**. |
@@ -83,7 +83,7 @@ npm run dev
 ---
 
 ## 🔒 Security Philosophy
-* **Zero-Trust Biometrics:** Access is strictly granted only after verifying human liveness through blink detection (EAR < 0.2).
+* **Zero-Trust Biometrics:** Access is strictly granted only after verifying human liveness through __________.
 * **Data Masking:** Sensitive face vectors are **never** stored in raw format; they are serialized and encrypted before reaching the cloud to ensure user privacy.
   
 ---

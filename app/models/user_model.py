@@ -10,11 +10,8 @@ class User(Base):
     name = Column(String, nullable=False)
     age = Column(Integer, nullable=False)           # السن
     phone = Column(String, nullable=False)         # التليفون
-    emergency_contact = Column(String, nullable=False) # رقم الطوارئ
     face_embedding = Column(String, nullable=False) 
     
     
     is_active = Column(Boolean, default=True) 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     attendances = relationship("Attendance", back_populates="user")

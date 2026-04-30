@@ -7,7 +7,6 @@ class UserBase(BaseModel):
     name: str
     age: int
     phone: str
-    emergency_contact: str
 
 class UserCreate(UserBase):
     face_embedding: str # Required only during registration

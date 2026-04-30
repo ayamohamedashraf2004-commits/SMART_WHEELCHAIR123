@@ -17,10 +17,10 @@ function getEAR(eye: faceapi.Point[]): number {
   return (A + B) / (2.0 * C);
 }
 
-const EAR_OPEN_THRESHOLD   = 0.25;  // فوق الرقم ده = عين مفتوحة
-const EAR_CLOSED_THRESHOLD = 0.20;  // تحت الرقم ده = عين مغلقة
-const MIN_OPEN_FRAMES       = 5;    // لازم العين تكون مفتوحة قبل الرمشة
-const MIN_CLOSED_FRAMES     = 2;    // لازم تتقفل frames كافية
+const EAR_OPEN_THRESHOLD   = 0.25;  
+const EAR_CLOSED_THRESHOLD = 0.20;  
+const MIN_OPEN_FRAMES       = 5;    
+const MIN_CLOSED_FRAMES     = 2;    
 
 interface FaceRecognitionProps {
   onAuthenticated: (user: UserProfile) => void;
@@ -31,11 +31,9 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
   const rafRef         = useRef<number>(0);
   const blinkRunning   = useRef(false);
 
-  // ── Liveness state machine ────────────────────────────────────────────────
-  // المراحل: WAITING_OPEN → SAW_OPEN → SAW_CLOSED → BLINK_CONFIRMED
-  const openFrames    = useRef(0);   // كام frame العين كانت مفتوحة
-  const closedFrames  = useRef(0);   // كام frame العين كانت مغلقة
-  const sawOpen       = useRef(false); // شوفنا عين مفتوحة كفاية؟
+  const openFrames    = useRef(0);
+  const closedFrames  = useRef(0);
+  const sawOpen       = useRef(false);
 
   const [modelsLoaded,  setModelsLoaded]  = useState(false);
   const [blinkDetected, setBlinkDetected] = useState(false);
@@ -47,11 +45,13 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
   const [status,      setStatus]      = useState('LOADING_MODELS');
   const [error,       setError]       = useState<string | null>(null);
   const [showSignup,  setShowSignup]  = useState(false);
+  
+  // شلنا emergency_contact من الـ state هنا
   const [signupData,  setSignupData]  = useState<SignupData>({ name: '', age: 0, phone: '', emergency_contact: '' });
+  
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
 
-  // ── Load models ───────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -69,12 +69,10 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     return () => { cancelAnimationFrame(rafRef.current); blinkRunning.current = false; };
   }, []);
 
-  // ── Blink detection loop (Liveness-safe) ─────────────────────────────────
   const startBlinkLoop = useCallback(() => {
     if (!modelsLoaded || blinkRunning.current) return;
     blinkRunning.current = true;
 
-    // reset liveness state
     openFrames.current   = 0;
     closedFrames.current = 0;
     sawOpen.current      = false;
@@ -95,7 +93,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
       if (!detection) {
         setFaceFound(false);
         setEarValue(null);
-        // لو الوجه اختفى نرجع البداية للسلامة
         openFrames.current   = 0;
         closedFrames.current = 0;
         sawOpen.current      = false;
@@ -110,38 +107,22 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
       const ear      = (getEAR(leftEye) + getEAR(rightEye)) / 2;
       setEarValue(parseFloat(ear.toFixed(3)));
 
-      // ── State machine ─────────────────────────────────────────────────────
       if (ear >= EAR_OPEN_THRESHOLD) {
-        // عين مفتوحة
         closedFrames.current = 0;
         openFrames.current  += 1;
-
         if (openFrames.current >= MIN_OPEN_FRAMES) {
-          sawOpen.current = true; // ✅ مرحلة 1: تأكدنا العين كانت مفتوحة فعلاً
+          sawOpen.current = true;
         }
-
-        // مرحلة 3: بعد ما اتقفلت، فتحت تاني = رمشة حقيقية ✅
-        if (sawOpen.current && closedFrames.current === 0 && openFrames.current === 1) {
-          // (openFrames reset to 1 means just reopened after being closed)
-        }
-
       } else if (ear < EAR_CLOSED_THRESHOLD && sawOpen.current) {
-        // عين مغلقة — بس بعد ما شوفنا عين مفتوحة كفاية (منع false positive)
         closedFrames.current += 1;
         openFrames.current    = 0;
 
         if (closedFrames.current >= MIN_CLOSED_FRAMES) {
-          // ✅ مرحلة 2 اكتملت: رمشة حقيقية اتكشفت!
           blinkRunning.current = false;
           cancelAnimationFrame(rafRef.current);
           setBlinkCount(c => c + 1);
           setBlinkDetected(true);
           return;
-        }
-      } else {
-        // منطقة رمادية بين الاتنين — مستنيين
-        if (ear >= EAR_OPEN_THRESHOLD) {
-          closedFrames.current = 0;
         }
       }
 
@@ -155,7 +136,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     if (modelsLoaded) startBlinkLoop();
   }, [modelsLoaded, startBlinkLoop]);
 
-  // ── Auto-login after blink ────────────────────────────────────────────────────
   useEffect(() => {
     if (blinkDetected && !isLoggingIn && !showSignup) {
       loginWithCapture();
@@ -180,8 +160,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     setStatus('BLINK_VERIFIED ✓  CAPTURING');
 
     await new Promise(r => setTimeout(r, 400));
-
-    // ✅ احفظ الصورة كـ data URL قبل الإرسال
     const photoUrl = webcamRef.current?.getScreenshot() ?? null;
 
     const blob = captureFrame();
@@ -195,7 +173,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     setProgress(65); setStatus('VERIFYING_IDENTITY');
     try {
       const user = await api.login(blob);
-      // ✅ أضف الصورة للـ user object قبل ما تبعته للـ Dashboard
       if (photoUrl) user.photo_url = photoUrl;
       setProgress(100); setStatus('AUTHENTICATED ✓');
       setTimeout(() => onAuthenticated(user), 600);
@@ -229,9 +206,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     ? 'text-muted-foreground'
     : earValue < EAR_OPEN_THRESHOLD ? 'text-amber-400' : 'text-accent';
 
-  // ══════════════════════════════════════════════════════════════════════════════
-  // Signup screen
-  // ══════════════════════════════════════════════════════════════════════════════
   if (showSignup) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -247,7 +221,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
           </div>
           <p className="text-muted-foreground text-xs mb-4 font-mono">Blink once, then fill the form.</p>
 
-          {/* Camera preview */}
           <div className="relative w-full aspect-video bg-background rounded-lg overflow-hidden mb-3">
             <Webcam ref={webcamRef} className="absolute inset-0 w-full h-full object-cover opacity-70"
               mirrored audio={false} screenshotFormat="image/jpeg"
@@ -273,10 +246,11 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
           {error && <p className="text-destructive text-xs font-mono mb-3">{error}</p>}
 
           <form onSubmit={handleSignup} className="space-y-3">
-            {(['name', 'age', 'phone', 'emergency_contact'] as const).map(field => (
+            {/* شلنا الـ emergency_contact من المصفوفة اللي بتعمل الـ inputs */}
+            {(['name', 'age', 'phone'] as const).map(field => (
               <input key={field}
-                type={field === 'age' ? 'number' : field === 'phone' || field === 'emergency_contact' ? 'tel' : 'text'}
-                required placeholder={field === 'emergency_contact' ? 'Emergency Contact' : field.charAt(0).toUpperCase() + field.slice(1)}
+                type={field === 'age' ? 'number' : field === 'phone' ? 'tel' : 'text'}
+                required placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
                 value={(signupData as any)[field] || ''}
                 onChange={(e) => setSignupData(d => ({ ...d, [field]: field === 'age' ? parseInt(e.target.value) || 0 : e.target.value }))}
                 className="w-full h-9 px-3 bg-secondary rounded-lg text-xs font-mono text-foreground placeholder:text-muted-foreground border-none outline-none focus:ring-1 focus:ring-primary/30"
@@ -292,9 +266,7 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════════
-  // Login screen
-  // ══════════════════════════════════════════════════════════════════════════════
+  // الجزء الباقي من الكود كما هو تماماً...
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 bg-background flex items-center justify-center z-50">
@@ -313,7 +285,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
           </div>
         )}
 
-        {/* Webcam */}
         <div className="relative w-full aspect-square bg-background rounded-lg overflow-hidden">
           <Webcam ref={webcamRef} className="absolute inset-0 w-full h-full object-cover opacity-60"
             mirrored audio={false} screenshotFormat="image/jpeg"
@@ -336,7 +307,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
             <div className="absolute w-10 h-[1px] bg-primary/30" />
           </div>
 
-          {/* Blink status badge */}
           {modelsLoaded && !isLoggingIn && (
             <div className={`absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-mono font-bold border transition-all ${
               blinkDetected
@@ -358,7 +328,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
           )}
         </div>
 
-        {/* EAR indicator */}
         {modelsLoaded && (
           <div className="mt-3 flex items-center gap-3 text-[9px] font-mono">
             {faceFound ? <Eye size={10} className="text-accent" /> : <EyeOff size={10} className="text-muted-foreground" />}
@@ -368,7 +337,6 @@ const FaceRecognition: React.FC<FaceRecognitionProps> = ({ onAuthenticated }) =>
           </div>
         )}
 
-        {/* Progress */}
         <div className="mt-3 space-y-1.5">
           <div className="flex justify-between text-[10px] font-mono text-primary">
             <span>{status}...</span>

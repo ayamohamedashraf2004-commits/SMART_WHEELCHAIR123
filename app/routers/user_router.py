@@ -18,11 +18,10 @@ async def signup_web(
     name: str = Form(...),
     age: int = Form(...),
     phone: str = Form(...),
-    emergency_contact: str = Form(...),
     image: UploadFile = File(...),   # ← صورة من Webcam
 ):
     """تسجيل مستخدم جديد باستخدام صورة مرسلة من المتصفح"""
-    user_info = {"name": name, "age": age, "phone": phone, "emergency_contact": emergency_contact}
+    user_info = {"name": name, "age": age, "phone": phone}
     image_bytes = await image.read()
 
     try:
@@ -71,9 +70,9 @@ def logout(user_id: int):
 # 4. القديم (للكاميرا المحلية على السيرفر) — محفوظ للتجربة
 # ─────────────────────────────────────────────
 @router.post("/users/signup-scan", tags=["Users - Legacy"])
-async def signup_via_scan(name: str, age: int, phone: str, emergency_contact: str):
+async def signup_via_scan(name: str, age: int, phone: str, ):
     """يفتح كاميرا السيرفر للتسجيل — للاستخدام المحلي فقط"""
-    user_info = {"name": name, "age": age, "phone": phone, "emergency_contact": emergency_contact}
+    user_info = {"name": name, "age": age, "phone": phone, }
     try:
         success = await run_in_threadpool(capture_and_register, user_info)
         if success:

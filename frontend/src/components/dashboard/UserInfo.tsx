@@ -6,16 +6,28 @@ interface UserInfoProps {
   user: UserProfile | null;
 }
 
-/** تحويل ISO timestamp لشكل مقروء */
-function formatDateTime(iso?: string): string {
+/** ✅ تحويل timestamp بشكل أدق (حل مشكلة الساعة) */
+function formatDateTime(iso?: string | null): string {
   if (!iso) return '--';
+
   try {
-    return new Date(iso).toLocaleString('en-GB', {
-      year: 'numeric', month: 'short', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
+    const date = new Date(iso); // 👈 بدون أي تعديل
+
+    if (isNaN(date.getTime())) return '--';
+
+    return date.toLocaleString('en-GB', {
+      timeZone: 'Africa/Cairo',
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
     });
+
   } catch {
-    return iso.slice(0, 16).replace('T', ' ');
+    return '--';
   }
 }
 
@@ -35,27 +47,32 @@ const UserInfo: React.FC<UserInfoProps> = ({ user }) => {
         </h3>
       </div>
 
-      {/* USER HEADER — صورة أو أحرف */}
+      {/* AVATAR + NAME */}
       <div className="flex items-center gap-3 mb-3">
 
-        {user?.photo_url ? (
+        {/* ❌ تم إلغاء الصورة (مسيبها comment) */}
+        {/*
+        { user?.photo_url ? (
           <img
             src={user.photo_url}
             alt={user.name}
             className="w-10 h-10 rounded-full object-cover glow-cyan border border-primary/30"
           />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-mono text-sm font-bold glow-cyan">
-            {initials}
-          </div>
-        )}
+        */}
+        
+        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-mono text-sm font-bold glow-cyan">
+          {initials}
+        </div>
+
+        {/* )} */}
 
         <div>
           <p className="text-xs font-mono text-foreground font-semibold">
             {user?.name || 'Unknown'}
           </p>
           <p className="text-[9px] font-mono text-muted-foreground">
-            ID: {user?.id ? `WC-${user.id.toString().slice(0, 8).toUpperCase()}` : 'N/A'}
+            ID: {user?.id ? `WC-${user.id.toString().padStart(4, '0')}` : 'N/A'}
           </p>
         </div>
       </div>
@@ -65,7 +82,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ user }) => {
 
         <InfoRow
           label="AGE"
-          value={user?.age ? String(user.age) : '--'}
+          value={user?.age ? `${user.age} yrs` : '--'}
         />
 
         <InfoRow
@@ -74,11 +91,6 @@ const UserInfo: React.FC<UserInfoProps> = ({ user }) => {
           icon={<Phone size={10} />}
         />
 
-        <InfoRow
-          label="EMERGENCY"
-          value={user?.emergency_contact || '--'}
-          icon={<AlertTriangle size={10} />}
-        />
 
         <InfoRow
           label="STATUS"
@@ -90,6 +102,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ user }) => {
           }
         />
 
+        {/* ✅ Last Login */}
         <InfoRow
           label="LAST_LOGIN"
           value={formatDateTime(user?.last_login)}

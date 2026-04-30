@@ -34,7 +34,6 @@ def load_registered_users():
                     "name":              user["name"],
                     "age":               user.get("age"),
                     "phone":             user.get("phone"),
-                    "emergency_contact": user.get("emergency_contact"),
                     "embedding":         embedding
                 })
             except Exception as dec_err:
@@ -87,33 +86,36 @@ def web_face_login(image_bytes: bytes) -> dict | None:
                 [user["embedding"]], face_encoding, tolerance=0.5
             )
             if matches[0]:
-                # تسجيل الحضور في Supabase
+                # ── Step 1: جيب آخر لوجين سابق قبل ما تسجل الحالي ─────────────
+                last_login = None
+                try:
+                    uid = str(user["id"])
+                    print(f"🔍 Querying last login for user_id='{uid}'")
+                    att_res = supabase.table("attendance") \
+                        .select("created_at") \
+                        .eq("user_id", uid) \
+                        .eq("status", "Present") \
+                        .order("created_at", desc=True) \
+                        .limit(1) \
+                        .execute()
+                    rows = att_res.data or []
+                    print(f"🔍 attendance rows returned: {rows}")
+                    if rows:
+                        last_login = rows[0]["created_at"]
+                        print(f"✅ last_login = {last_login}")
+                    else:
+                        print(f"⚠️ No previous attendance found for user_id='{uid}'")
+                except Exception as e:
+                    print(f"⚠️ Last-login fetch error: {e}")
+
+                # ── Step 2: سجّل الحضور الحالي ───────────────────────────────────
                 try:
                     supabase.table("attendance").insert({
-                        "user_id": user["id"],
+                        "user_id": str(user["id"]),   # text دايماً
                         "status": "Present"
                     }).execute()
                 except Exception as e:
-                    print(f"⚠️ Attendance Error: {e}")
-
-                # جلب آخر تسجيل دخول سابق من جدول attendance
-                last_login = None
-                try:
-                    att_res = supabase.table("attendance") \
-                        .select("created_st") \
-                        .eq("user_id", str(user["id"])) \
-                        .eq("status", "Present") \
-                        .order("created_st", desc=True) \
-                        .limit(2) \
-                        .execute()
-                    # أول نتيجة هي اللوجين الحالي، التانية هي السابق
-                    rows = att_res.data or []
-                    if len(rows) >= 2:
-                        last_login = rows[1]["created_st"]
-                    elif len(rows) == 1:
-                        last_login = rows[0]["created_st"]
-                except Exception as e:
-                    print(f"⚠️ Last-login fetch error: {e}")
+                    print(f"⚠️ Attendance Insert Error: {e}")
 
                 print(f"✅ Welcome {user['name']}!")
                 return {
@@ -121,7 +123,6 @@ def web_face_login(image_bytes: bytes) -> dict | None:
                     "name":              user["name"],
                     "age":               user["age"],
                     "phone":             user["phone"],
-                    "emergency_contact": user["emergency_contact"],
                     "status":            "Present",
                     "last_login":        last_login,   # ✅ من attendance
                 }
@@ -152,7 +153,6 @@ def web_capture_and_register(user_data: dict, image_bytes: bytes) -> bool:
         "name": user_data["name"],
         "age": user_data["age"],
         "phone": user_data["phone"],
-        "emergency_contact": user_data["emergency_contact"],
         "face_embedding": encrypted_encoding
     }
     supabase.table("users").insert(new_user).execute()
@@ -204,7 +204,6 @@ def capture_and_register(user_data: dict) -> bool:
                     "name": user_data["name"],
                     "age": user_data["age"],
                     "phone": user_data["phone"],
-                    "emergency_contact": user_data["emergency_contact"],
                     "face_embedding": encrypted_encoding
                 }).execute()
                 print("✅ Saved to database!")
@@ -270,7 +269,7 @@ def process_logout(user_id: int) -> bool:
     """تسجيل خروج المستخدم في الداتابيز"""
     try:
         response = supabase.table("attendance").insert({
-            "user_id": user_id,
+            "user_id": str(user_id),   # text دايماً
             "status": "Signed Out"
         }).execute()
         if response.data:
